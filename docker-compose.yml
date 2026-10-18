@@ -1,11 +1,11 @@
 services:
   postgres:
     image: postgres:17
-    container_name: proyecto-postgres
+    container_name: lab-tbd-postgres
     environment:
-      POSTGRES_DB: proyecto
-      POSTGRES_USER: proyecto
-      POSTGRES_PASSWORD: proyecto
+      POSTGRES_DB: lab_tbd
+      POSTGRES_USER: labtbd
+      POSTGRES_PASSWORD: labtbd
     ports:
       - "5432:5432"
     volumes:

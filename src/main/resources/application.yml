@@ -1,22 +1,35 @@
 spring:
   application:
-    name: proyecto-backend
+    name: lab-tbd-back
   datasource:
-    url: ${DB_URL:jdbc:postgresql://localhost:5432/proyecto}
-    username: ${DB_USER:proyecto}
-    password: ${DB_PASSWORD:proyecto}
-  jpa:
-    hibernate:
-      # "update" sirve para desarrollo. En producción usa "validate" con Flyway o Liquibase.
-      ddl-auto: update
-    open-in-view: false
+    url: ${DB_URL:jdbc:postgresql://localhost:5432/lab_tbd}
+    username: ${DB_USER:labtbd}
+    password: ${DB_PASSWORD:labtbd}
+  sql:
+    init:
+      # Ejecuta schema.sql al arrancar (usa CREATE TABLE IF NOT EXISTS, es idempotente).
+      mode: always
+  autoconfigure:
+    exclude:
+      # No usamos el usuario en memoria por defecto: la autenticación es por JWT + tabla usuarios.
+      - org.springframework.boot.autoconfigure.security.servlet.UserDetailsServiceAutoConfiguration
 
 server:
   port: ${PORT:8080}
+  error:
+    include-message: always
 
 app:
   cors:
     allowed-origins: ${CORS_ORIGINS:http://localhost:5173}
+  jwt:
+    # Mínimo 32 caracteres. CAMBIAR en cualquier entorno que no sea desarrollo local.
+    secret: ${JWT_SECRET:dev-only-secret-change-me-please-0123456789}
+    expiration-minutes: ${JWT_EXPIRATION_MINUTES:60}
+  admin:
+    # Usuario ADMIN creado al arrancar si no existe. CAMBIAR la contraseña fuera de desarrollo.
+    username: ${ADMIN_USERNAME:admin}
+    password: ${ADMIN_PASSWORD:admin12345}
 
 management:
   endpoints:
