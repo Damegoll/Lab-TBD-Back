@@ -1,0 +1,25 @@
+spring:
+  application:
+    name: proyecto-backend
+  datasource:
+    url: ${DB_URL:jdbc:postgresql://localhost:5432/proyecto}
+    username: ${DB_USER:proyecto}
+    password: ${DB_PASSWORD:proyecto}
+  jpa:
+    hibernate:
+      # "update" sirve para desarrollo. En producción usa "validate" con Flyway o Liquibase.
+      ddl-auto: update
+    open-in-view: false
+
+server:
+  port: ${PORT:8080}
+
+app:
+  cors:
+    allowed-origins: ${CORS_ORIGINS:http://localhost:5173}
+
+management:
+  endpoints:
+    web:
+      exposure:
+        include: health,info
