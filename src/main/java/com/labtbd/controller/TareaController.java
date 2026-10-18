@@ -1,5 +1,8 @@
-package com.labtbd.tarea;
+package com.labtbd.controller;
 
+import com.labtbd.dto.TareaRequest;
+import com.labtbd.dto.TareaResponse;
+import com.labtbd.service.TareaService;
 import jakarta.validation.Valid;
 import org.springframework.http.HttpStatus;
 import org.springframework.web.bind.annotation.DeleteMapping;
@@ -11,7 +14,6 @@ import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.ResponseStatus;
 import org.springframework.web.bind.annotation.RestController;
-import org.springframework.web.server.ResponseStatusException;
 
 import java.util.List;
 
@@ -23,42 +25,36 @@ import java.util.List;
 @RequestMapping("/api/tareas")
 public class TareaController {
 
-    private final TareaRepository repository;
+    private final TareaService service;
 
-    public TareaController(TareaRepository repository) {
-        this.repository = repository;
+    public TareaController(TareaService service) {
+        this.service = service;
     }
 
     @GetMapping
-    public List<Tarea> listar() {
-        return repository.listar();
+    public List<TareaResponse> listar() {
+        return service.listar();
     }
 
     @GetMapping("/{id}")
-    public Tarea obtener(@PathVariable long id) {
-        return repository.buscar(id).orElseThrow(TareaController::noEncontrada);
+    public TareaResponse obtener(@PathVariable long id) {
+        return service.obtener(id);
     }
 
     @PostMapping
     @ResponseStatus(HttpStatus.CREATED)
-    public Tarea crear(@Valid @RequestBody TareaRequest req) {
-        return repository.crear(req);
+    public TareaResponse crear(@Valid @RequestBody TareaRequest req) {
+        return service.crear(req);
     }
 
     @PutMapping("/{id}")
-    public Tarea actualizar(@PathVariable long id, @Valid @RequestBody TareaRequest req) {
-        return repository.actualizar(id, req).orElseThrow(TareaController::noEncontrada);
+    public TareaResponse actualizar(@PathVariable long id, @Valid @RequestBody TareaRequest req) {
+        return service.actualizar(id, req);
     }
 
     @DeleteMapping("/{id}")
     @ResponseStatus(HttpStatus.NO_CONTENT)
     public void eliminar(@PathVariable long id) {
-        if (!repository.eliminar(id)) {
-            throw noEncontrada();
-        }
-    }
-
-    private static ResponseStatusException noEncontrada() {
-        return new ResponseStatusException(HttpStatus.NOT_FOUND, "Tarea no encontrada");
+        service.eliminar(id);
     }
 }

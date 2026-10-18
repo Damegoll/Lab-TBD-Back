@@ -7,7 +7,9 @@ services:
       POSTGRES_USER: labtbd
       POSTGRES_PASSWORD: labtbd
     ports:
-      - "5432:5432"
+      # 5433 en tu PC -> 5432 dentro del contenedor. Se usa 5433 para no chocar
+      # con un PostgreSQL instalado localmente, que normalmente ocupa el 5432.
+      - "5433:5432"
     volumes:
       - pgdata:/var/lib/postgresql/data
 

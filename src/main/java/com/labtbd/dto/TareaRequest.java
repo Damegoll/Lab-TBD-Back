@@ -1,4 +1,4 @@
-package com.labtbd.tarea;
+package com.labtbd.dto;
 
 import jakarta.validation.constraints.NotBlank;
 import jakarta.validation.constraints.Size;
@@ -8,7 +8,7 @@ public record TareaRequest(
         @Size(max = 1000) String descripcion,
         Boolean completada) {
 
-    public boolean completadaONo() {
+    public boolean estaCompletada() {
         return Boolean.TRUE.equals(completada);
     }
 }

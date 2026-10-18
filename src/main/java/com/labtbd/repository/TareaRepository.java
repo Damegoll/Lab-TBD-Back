@@ -1,5 +1,6 @@
-package com.labtbd.tarea;
+package com.labtbd.repository;
 
+import com.labtbd.entity.Tarea;
 import org.springframework.jdbc.core.JdbcTemplate;
 import org.springframework.jdbc.core.RowMapper;
 import org.springframework.stereotype.Repository;
@@ -35,16 +36,16 @@ public class TareaRepository {
                 .stream().findFirst();
     }
 
-    public Tarea crear(TareaRequest req) {
+    public Tarea crear(String titulo, String descripcion, boolean completada) {
         return jdbc.queryForObject(
                 "INSERT INTO tareas (titulo, descripcion, completada) VALUES (?, ?, ?) RETURNING " + COLUMNAS,
-                MAPPER, req.titulo(), req.descripcion(), req.completadaONo());
+                MAPPER, titulo, descripcion, completada);
     }
 
-    public Optional<Tarea> actualizar(long id, TareaRequest req) {
+    public Optional<Tarea> actualizar(long id, String titulo, String descripcion, boolean completada) {
         return jdbc.query(
                 "UPDATE tareas SET titulo = ?, descripcion = ?, completada = ? WHERE id = ? RETURNING " + COLUMNAS,
-                MAPPER, req.titulo(), req.descripcion(), req.completadaONo(), id)
+                MAPPER, titulo, descripcion, completada, id)
                 .stream().findFirst();
     }
 

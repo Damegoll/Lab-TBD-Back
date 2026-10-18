@@ -2,7 +2,9 @@ spring:
   application:
     name: lab-tbd-back
   datasource:
-    url: ${DB_URL:jdbc:postgresql://localhost:5432/lab_tbd}
+    # Por defecto apunta al PostgreSQL del docker-compose (puerto 5433).
+    # Si usas un PostgreSQL propio, define DB_URL / DB_USER / DB_PASSWORD.
+    url: ${DB_URL:jdbc:postgresql://localhost:5433/lab_tbd}
     username: ${DB_USER:labtbd}
     password: ${DB_PASSWORD:labtbd}
   sql:
