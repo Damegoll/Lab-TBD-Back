@@ -12,3 +12,5 @@ CREATE TABLE IF NOT EXISTS tareas (
     completada  BOOLEAN       NOT NULL DEFAULT FALSE,
     creada_en   TIMESTAMPTZ   NOT NULL DEFAULT now()
 );
+
+-- Este schema es temporal, despues hay que ordenar las cosas bien
