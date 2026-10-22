@@ -1,119 +1,102 @@
 # Lab-TBD-Back
 
-API REST con **Spring Boot 3.5**, **Maven**, **Java 21** y **PostgreSQL**.
+API REST en Java 21 / Spring Boot 3.5, PostgreSQL y `JdbcTemplate`. El proyecto no usa JPA, Hibernate ni otro ORM: los repositorios ejecutan SQL explícito.
 
-- **Sin ORM**: acceso a datos con `JdbcTemplate` y SQL escrito a mano (no hay JPA ni Hibernate).
-- **Autenticación**: middleware (`JwtAuthFilter`) que valida un JWT en el header `Authorization: Bearer ...`.
-- **Autorización por rol (RBAC)**: roles `ADMIN` y `USER`, definidos en `SecurityConfig`.
+## Despliegue local con Docker Compose
 
-## Requisitos
+Compose levanta PostgreSQL y la API. Requiere Docker con Docker Compose v2:
 
-- Java 21
-- Maven 3.9+
-- Docker (opcional, para levantar PostgreSQL)
-
-## Puesta en marcha
-
-```bash
-docker compose up -d      # PostgreSQL en localhost:5433
-mvn spring-boot:run       # API en http://localhost:8080
+```powershell
+docker compose up --build -d
+docker compose ps
+docker compose logs -f api
 ```
 
-Al arrancar se ejecuta `src/main/resources/schema.sql` (crea las tablas si no existen) y se crea un
-usuario `ADMIN` inicial.
+La API queda en `http://localhost:8080`; PostgreSQL en `localhost:5433`. Para detener los contenedores sin borrar la base:
 
-> **Usuario inicial (solo desarrollo):** `admin` / `admin12345`.
-> Cambia `ADMIN_PASSWORD` y `JWT_SECRET` en cualquier entorno que no sea local.
-
-## Base de datos
-
-El `docker-compose.yml` publica PostgreSQL en el puerto **5433** (no en el 5432) para no chocar con un
-PostgreSQL instalado en tu equipo. Credenciales: base `lab_tbd`, usuario `labtbd`, contraseña `labtbd`.
-
-### Usar tu propio PostgreSQL (sin Docker)
-
-Crea el usuario y la base, por ejemplo desde `psql` como `postgres`:
-
-```sql
-CREATE USER labtbd WITH PASSWORD 'labtbd';
-CREATE DATABASE lab_tbd OWNER labtbd;
+```powershell
+docker compose down
 ```
 
-y arranca la app apuntando a tu servidor (en IntelliJ: *Run > Edit Configurations > Environment variables*):
+Para borrar también los datos persistidos (acción destructiva):
 
-```
-DB_URL=jdbc:postgresql://localhost:5432/lab_tbd;DB_USER=labtbd;DB_PASSWORD=labtbd
-```
-
-### Error "la autenticación password falló para el usuario labtbd"
-
-La app llegó a un PostgreSQL, pero ese servidor no tiene el usuario `labtbd` con esa contraseña.
-Casi siempre es porque se conectó a un PostgreSQL local en lugar del contenedor. Revisa:
-
-1. `docker compose ps`: el contenedor `lab-tbd-postgres` debe estar `running`.
-2. Que `DB_URL` (si lo definiste) apunte al puerto correcto: 5433 con Docker, o el de tu instalación local.
-3. Si el volumen de Docker se creó antes con otras credenciales, recrea la base:
-   `docker compose down -v && docker compose up -d` (borra los datos).
-
-## Variables de entorno
-
-| Variable                 | Valor por defecto                           |
-|--------------------------|---------------------------------------------|
-| `DB_URL`                 | `jdbc:postgresql://localhost:5433/lab_tbd`  |
-| `DB_USER` / `DB_PASSWORD`| `labtbd` / `labtbd`                         |
-| `PORT`                   | `8080`                                      |
-| `CORS_ORIGINS`           | `http://localhost:5173` (el front con Vite) |
-| `JWT_SECRET`             | valor de desarrollo (mín. 32 caracteres)    |
-| `JWT_EXPIRATION_MINUTES` | `60`                                        |
-| `ADMIN_USERNAME`         | `admin`                                     |
-| `ADMIN_PASSWORD`         | `admin12345`                                |
-
-## Endpoints y permisos
-
-| Método | Ruta                | Acceso            | Descripción                    |
-|--------|---------------------|-------------------|--------------------------------|
-| POST   | `/api/auth/register`| Público           | Crea un usuario con rol `USER` |
-| POST   | `/api/auth/login`   | Público           | Devuelve `{token, username, rol}` |
-| GET    | `/api/tareas`       | `USER`, `ADMIN`   | Listar tareas                  |
-| GET    | `/api/tareas/{id}`  | `USER`, `ADMIN`   | Obtener una tarea              |
-| POST   | `/api/tareas`       | `USER`, `ADMIN`   | Crear tarea                    |
-| PUT    | `/api/tareas/{id}`  | `USER`, `ADMIN`   | Actualizar tarea               |
-| DELETE | `/api/tareas/{id}`  | solo `ADMIN`      | Eliminar tarea                 |
-| GET    | `/api/usuarios`     | solo `ADMIN`      | Listar usuarios                |
-| GET    | `/actuator/health`  | Público           | Estado del servicio            |
-
-Sin token válido la API responde `401`; con token pero sin el rol requerido, `403`.
-
-Ejemplo:
-
-```bash
-TOKEN=$(curl -s -X POST localhost:8080/api/auth/login \
-  -H "Content-Type: application/json" \
-  -d '{"username":"admin","password":"admin12345"}' | jq -r .token)
-
-curl -X POST localhost:8080/api/tareas \
-  -H "Authorization: Bearer $TOKEN" -H "Content-Type: application/json" \
-  -d '{"titulo":"Primera tarea","descripcion":"Probar la API"}'
+```powershell
+docker compose down -v
 ```
 
-## Estructura (por capas)
+La primera ejecución construye la imagen de la aplicación y puede tardar mientras Maven descarga dependencias. El servicio `api` espera a que PostgreSQL esté saludable antes de arrancar.
 
-```
-src/main/java/com/labtbd
-├── LabTbdApplication.java
-├── controller/   # AuthController, TareaController, UsuarioController (HTTP)
-├── service/      # AuthService, TareaService, UsuarioService (lógica de negocio)
-├── repository/   # TareaRepository, UsuarioRepository (SQL con JdbcTemplate)
-├── entity/       # Tarea, Usuario (filas de la base de datos)
-├── dto/          # objetos de entrada/salida de la API (requests y responses)
-├── security/     # JwtService y JwtAuthFilter (middleware de autenticación)
-└── config/       # SecurityConfig (RBAC, CORS, BCrypt) y AdminInitializer
-src/main/resources
-├── application.yml
-└── schema.sql
+### Ejecutar la API desde Maven
+
+Con Maven 3.9+ y PostgreSQL ya ejecutándose:
+
+```powershell
+mvn spring-boot:run
 ```
 
-Flujo de una petición: `controller` -> `service` -> `repository` -> PostgreSQL. El controller solo
-conoce DTOs, el repository solo conoce entities.
+## Estado del despliegue
 
-`Tarea` es solo un CRUD de ejemplo: reemplázalo por tu dominio real.
+Compose es un despliegue local de desarrollo, no una configuración para nube/producción. No hay todavía pipeline CI/CD, TLS, proxy inverso ni infraestructura cloud.
+
+La aplicación inicializa `src/main/resources/SQLResources/schema.sql`. Ese esquema crea/migra la tabla `usuarios` y conserva `tareas` como ejemplo. Aunque ya existen capas Java para vehículos, tarifas, rebalanceos y auditoría, sus tablas, procedimientos y triggers de dominio aún deben incorporarse al esquema antes de que esos endpoints puedan operar contra una base nueva.
+
+## Autenticación y permisos
+
+- Las rutas `/api/v1/auth/register`, `/api/v1/auth/login` y `/actuator/health` son públicas.
+- El registro público siempre asigna el rol `USUARIO`; no acepta el rol desde el cliente.
+- El resto de rutas requiere `Authorization: Bearer <JWT>`.
+- Roles disponibles: `USUARIO`, `OPERADOR` y `ADMIN`. Los endpoints también pueden aplicar autorización por método con `@PreAuthorize`.
+- La contraseña se almacena con BCrypt. Los tokens son stateless y duran 60 minutos por defecto.
+- Usuario administrador inicial de desarrollo: `admin` / `admin12345`. Se crea solo si no existe.
+
+Ejemplo de inicio de sesión:
+
+```http
+POST /api/v1/auth/login
+Content-Type: application/json
+
+{"username":"admin","password":"admin12345"}
+```
+
+La respuesta incluye `token`, `tokenType`, `username` y `rol`. Usa el token en las siguientes peticiones:
+
+```http
+Authorization: Bearer <token>
+```
+
+`401 Unauthorized` significa que falta o no es válido el token; `403 Forbidden` significa que el usuario autenticado no tiene el rol requerido.
+
+## Configuración
+
+| Variable | Valor local por defecto | Descripción |
+|---|---|---|
+| `DB_URL` | `jdbc:postgresql://localhost:5433/lab_tbd` | URL JDBC. En Compose se reemplaza para usar el host `postgres`. |
+| `DB_USER` | `labtbd` | Usuario PostgreSQL. |
+| `DB_PASSWORD` | `labtbd` | Contraseña local PostgreSQL. |
+| `PORT` | `8080` | Puerto HTTP de la API. |
+| `CORS_ORIGINS` | `http://localhost:5173` | Orígenes permitidos, separados por coma. |
+| `JWT_SECRET` | Secreto de desarrollo incluido en configuración | Clave HMAC de al menos 32 bytes. Debe sustituirse fuera de local. |
+| `JWT_EXPIRATION_MINUTES` | `60` | Vigencia del JWT. |
+| `ADMIN_USERNAME` | `admin` | Usuario administrador inicial. |
+| `ADMIN_PASSWORD` | `admin12345` | Contraseña inicial; cambiar fuera de local. |
+| `ADMIN_EMAIL` | `admin@localhost` | Email del administrador inicial. |
+
+Para probar otro secreto local, define `JWT_SECRET` en el entorno antes de levantar la aplicación. En producción no uses las credenciales ni el secreto por defecto; usa secretos robustos administrados fuera del repositorio.
+
+## Rutas implementadas
+
+| Método | Ruta | Acceso |
+|---|---|---|
+| `POST` | `/api/v1/auth/register` | Público; crea rol `USUARIO` |
+| `POST` | `/api/v1/auth/login` | Público |
+| `GET` | `/api/v1/usuarios/me` | JWT válido |
+| `GET` | `/api/v1/usuarios` y `/api/v1/usuarios/{id}` | `ADMIN` |
+| `POST` | `/api/v1/usuarios` | `ADMIN` |
+| `PUT`, `DELETE` | `/api/v1/usuarios/{id}` | `ADMIN` |
+| `GET`, `POST`, `PUT`, `PATCH` | `/api/v1/vehiculos...` | `OPERADOR` o `ADMIN` |
+| `GET`, `POST`, `DELETE` | `/api/v1/tarifas...` | `OPERADOR` o `ADMIN` |
+| `GET`, `POST` | `/api/v1/ordenes-traslado...` | `OPERADOR` o `ADMIN` |
+| `GET` | `/api/v1/vehiculos/{id}/auditoria` | `OPERADOR` o `ADMIN` |
+| `GET` | `/actuator/health` | Público |
+
+Las rutas de vehículos, tarifas, órdenes y auditoría tienen controladores, pero requieren completar el esquema SQL del dominio antes de usarse en una instalación nueva.

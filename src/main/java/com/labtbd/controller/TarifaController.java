@@ -27,19 +27,19 @@ public class TarifaController {
     public TarifaController(TarifaService service) {this.service = service;}
 
     @GetMapping
-    @PreAuthorize("hasAnyRole'('OPERADOR','ADMIN')")
+    @PreAuthorize("hasAnyRole('OPERADOR', 'ADMIN')")
     public List<TarifaResponse> findAll() {
         return service.findAll().stream().map(TarifaResponse::desde).toList();
     }
 
     @PostMapping
-    @PreAuthorize("hasAnyRole'('OPERADOR','ADMIN')")
+    @PreAuthorize("hasAnyRole('OPERADOR', 'ADMIN')")
     public TarifaResponse create(@Valid @RequestBody TarifaRequest r){
         return TarifaResponse.desde(service.create(r));
     }
 
     @DeleteMapping("/{id}")
-    @PreAuthorize("hasAnyRole'('OPERADOR','ADMIN')")
+    @PreAuthorize("hasAnyRole('OPERADOR', 'ADMIN')")
     @ResponseStatus(HttpStatus.NO_CONTENT)
     public void deactivate(@PathVariable long id){
         service.deactivate(id);
