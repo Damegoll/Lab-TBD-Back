@@ -1,0 +1,41 @@
+spring:
+  application:
+    name: lab-tbd-back
+  datasource:
+    # Por defecto apunta al PostgreSQL del docker-compose (puerto 5433).
+    # Si usas un PostgreSQL propio, define DB_URL / DB_USER / DB_PASSWORD.
+    url: ${DB_URL:jdbc:postgresql://localhost:5433/lab_tbd}
+    username: ${DB_USER:labtbd}
+    password: ${DB_PASSWORD:labtbd}
+  sql:
+    init:
+      schema-locations: classpath:SQLResources/schema.sql
+      mode: always
+  autoconfigure:
+    exclude:
+      # No usamos el usuario en memoria por defecto: la autenticación es por JWT + tabla usuarios.
+      - org.springframework.boot.autoconfigure.security.servlet.UserDetailsServiceAutoConfiguration
+
+server:
+  port: ${PORT:8080}
+  error:
+    include-message: ${SERVER_ERROR_INCLUDE_MESSAGE:never}
+
+app:
+  cors:
+    allowed-origins: ${CORS_ORIGINS:http://localhost:5173}
+  jwt:
+    # Mínimo 32 bytes. Cambiar por un secreto aleatorio en cualquier entorno no local.
+    secret: ${JWT_SECRET:dev-only-secret-change-me-please-0123456789}
+    expiration-minutes: ${JWT_EXPIRATION_MINUTES:60}
+  admin:
+    # Usuario ADMIN creado al arrancar si no existe. Cambiar credenciales fuera de desarrollo.
+    username: ${ADMIN_USERNAME:admin}
+    password: ${ADMIN_PASSWORD:admin12345}
+    email: ${ADMIN_EMAIL:admin@localhost}
+
+management:
+  endpoints:
+    web:
+      exposure:
+        include: health,info

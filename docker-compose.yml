@@ -1,0 +1,43 @@
+services:
+  postgres:
+    image: postgres:17
+    container_name: lab-tbd-postgres
+    environment:
+      POSTGRES_DB: lab_tbd
+      POSTGRES_USER: labtbd
+      POSTGRES_PASSWORD: labtbd
+    ports:
+      # 5433 en tu PC -> 5432 dentro del contenedor. Se usa 5433 para no chocar
+      # con un PostgreSQL instalado localmente, que normalmente ocupa el 5432.
+      - "5433:5432"
+    volumes:
+      - pgdata:/var/lib/postgresql/data
+      -  ./src/main/resources/SQLResources/schema.sql:/docker-entrypoint-initdb.d/1-schema.sql
+      - ./src/main/resources/SQLResources/triggers_y_procedures.sql:/docker-entrypoint-initdb.d/2-triggers.sql
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U $$POSTGRES_USER -d $$POSTGRES_DB"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+
+  api:
+    build: .
+    container_name: lab-tbd-api
+    depends_on:
+      postgres:
+        condition: service_healthy
+    environment:
+      DB_URL: jdbc:postgresql://postgres:5432/lab_tbd
+      DB_USER: labtbd
+      DB_PASSWORD: labtbd
+      PORT: 8080
+      JWT_SECRET: ${JWT_SECRET:-dev-only-secret-change-me-please-0123456789}
+      ADMIN_USERNAME: ${ADMIN_USERNAME:-admin}
+      ADMIN_PASSWORD: ${ADMIN_PASSWORD:-admin12345}
+      ADMIN_EMAIL: ${ADMIN_EMAIL:-admin@localhost}
+      CORS_ORIGINS: ${CORS_ORIGINS:-http://localhost:5173}
+    ports:
+      - "8080:8080"
+
+volumes:
+  pgdata:
