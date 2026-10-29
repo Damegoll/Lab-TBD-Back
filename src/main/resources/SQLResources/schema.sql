@@ -32,8 +32,16 @@ CREATE TABLE IF NOT EXISTS tareas (
 CREATE TABLE IF NOT EXISTS estaciones (
     id     BIGSERIAL PRIMARY KEY,
     nombre VARCHAR(100) NOT NULL,
-    activa BOOLEAN NOT NULL DEFAULT TRUE
+    activa BOOLEAN NOT NULL DEFAULT TRUE,
+    capacidad INT NOT NULL DEFAULT 30 CHECK (capacidad > 0),
+    objetivo_bicicletas INT NOT NULL DEFAULT 0 CHECK (objetivo_bicicletas >= 0),
+    objetivo_scooters INT NOT NULL DEFAULT 0 CHECK (objetivo_scooters >= 0),
+    CHECK (objetivo_bicicletas + objetivo_scooters <= capacidad)
 );
+
+ALTER TABLE estaciones ADD COLUMN IF NOT EXISTS capacidad INT NOT NULL DEFAULT 30;
+ALTER TABLE estaciones ADD COLUMN IF NOT EXISTS objetivo_bicicletas INT NOT NULL DEFAULT 0;
+ALTER TABLE estaciones ADD COLUMN IF NOT EXISTS objetivo_scooters INT NOT NULL DEFAULT 0;
 
 CREATE TABLE IF NOT EXISTS vehiculos (
     id          BIGSERIAL PRIMARY KEY,
@@ -48,8 +56,11 @@ CREATE TABLE IF NOT EXISTS vehiculos (
 CREATE TABLE IF NOT EXISTS billeteras (
     id         BIGSERIAL PRIMARY KEY,
     usuario_id BIGINT NOT NULL UNIQUE REFERENCES usuarios(id) ON DELETE RESTRICT,
-    saldo      NUMERIC(10, 2) NOT NULL DEFAULT 0.00
+    saldo      NUMERIC(10, 2) NOT NULL DEFAULT 0.00,
+    activa     BOOLEAN NOT NULL DEFAULT TRUE
 );
+
+ALTER TABLE billeteras ADD COLUMN IF NOT EXISTS activa BOOLEAN NOT NULL DEFAULT TRUE;
 
 INSERT INTO billeteras (usuario_id)
 SELECT id FROM usuarios
@@ -74,14 +85,33 @@ CREATE TABLE IF NOT EXISTS viajes (
     iniciado_en         TIMESTAMPTZ NOT NULL DEFAULT NOW(),
     finalizado_en       TIMESTAMPTZ,
     costo               NUMERIC(10, 2),
+    tarifa_id           BIGINT REFERENCES tarifas(id) ON DELETE RESTRICT,
+    precio_por_minuto_aplicado NUMERIC(10, 2),
+    cancelado           BOOLEAN NOT NULL DEFAULT FALSE,
     CHECK (finalizado_en IS NULL OR finalizado_en >= iniciado_en),
-    CHECK (costo IS NULL OR costo >= 0)
+    CHECK (costo IS NULL OR costo >= 0),
+    CHECK (precio_por_minuto_aplicado IS NULL OR precio_por_minuto_aplicado >= 0),
+    CHECK (NOT cancelado OR finalizado_en IS NOT NULL)
 );
 
 ALTER TABLE viajes ADD COLUMN IF NOT EXISTS estacion_origen_id BIGINT
     REFERENCES estaciones(id) ON DELETE RESTRICT;
 ALTER TABLE viajes ADD COLUMN IF NOT EXISTS estacion_destino_id BIGINT
     REFERENCES estaciones(id) ON DELETE RESTRICT;
+ALTER TABLE viajes ADD COLUMN IF NOT EXISTS tarifa_id BIGINT
+    REFERENCES tarifas(id) ON DELETE RESTRICT;
+ALTER TABLE viajes ADD COLUMN IF NOT EXISTS precio_por_minuto_aplicado NUMERIC(10, 2);
+ALTER TABLE viajes ADD COLUMN IF NOT EXISTS cancelado BOOLEAN NOT NULL DEFAULT FALSE;
+
+CREATE TABLE IF NOT EXISTS movimientos_billetera (
+    id           BIGSERIAL PRIMARY KEY,
+    billetera_id BIGINT NOT NULL REFERENCES billeteras(id) ON DELETE RESTRICT,
+    operador_id  BIGINT REFERENCES usuarios(id) ON DELETE RESTRICT,
+    tipo         VARCHAR(20) NOT NULL CHECK (tipo IN ('ABONO', 'CARGO', 'CARGO_VIAJE')),
+    monto        NUMERIC(10, 2) NOT NULL CHECK (monto <> 0),
+    motivo       VARCHAR(500) NOT NULL CHECK (length(trim(motivo)) > 0),
+    creado_en    TIMESTAMPTZ NOT NULL DEFAULT NOW()
+);
 
 CREATE TABLE IF NOT EXISTS ordenes_traslado (
     id                   BIGSERIAL PRIMARY KEY,
@@ -117,6 +147,8 @@ WHERE a.operador_id IS NULL AND a.operador = u.username;
 CREATE INDEX IF NOT EXISTS idx_vehiculos_estado ON vehiculos (estado);
 CREATE INDEX IF NOT EXISTS idx_viajes_usuario_id ON viajes (usuario_id);
 CREATE INDEX IF NOT EXISTS idx_viajes_iniciado_en ON viajes (iniciado_en);
+CREATE INDEX IF NOT EXISTS idx_movimientos_billetera_fecha
+    ON movimientos_billetera (billetera_id, creado_en DESC);
 CREATE INDEX IF NOT EXISTS idx_auditoria_vehiculo_fecha
     ON auditoria_estado_vehiculo (vehiculo_id, fecha DESC);
 CREATE UNIQUE INDEX IF NOT EXISTS idx_viajes_usuario_activo

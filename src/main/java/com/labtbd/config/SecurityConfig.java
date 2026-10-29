@@ -1,6 +1,7 @@
 package com.labtbd.config;
 
 import com.labtbd.security.JwtAuthenticationFilter;
+import jakarta.servlet.DispatcherType;
 import java.util.Arrays;
 import java.util.List;
 import org.springframework.context.annotation.Bean;
@@ -40,6 +41,7 @@ public class SecurityConfig {
                         .authenticationEntryPoint(new HttpStatusEntryPoint(HttpStatus.UNAUTHORIZED))
                         .accessDeniedHandler(accessDeniedHandler()))
                 .authorizeHttpRequests(authorize -> authorize
+                        .dispatcherTypeMatchers(DispatcherType.ERROR).permitAll()
                         .requestMatchers("/api/v1/auth/**", "/actuator/health").permitAll()
                         .requestMatchers(HttpMethod.OPTIONS, "/**").permitAll()
                         .anyRequest().authenticated())

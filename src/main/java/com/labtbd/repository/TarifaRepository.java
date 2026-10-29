@@ -25,6 +25,16 @@ public class TarifaRepository {
         return jdbc.query("SELECT * FROM tarifas WHERE id = ?", mapper, id)
                 .stream().findFirst();
     }
+
+    public int update(long id, TarifaRequestData d) {
+        return jdbc.update("""
+                UPDATE tarifas
+                SET tipo_vehiculo = ?, precio_por_minuto = ?,
+                    vigente_desde = ?, vigente_hasta = ?
+                WHERE id = ? AND activa = TRUE
+                """, d.tipo().name(), d.precio(), d.desde(), d.hasta(), id);
+    }
+
     public Tarifa create(TarifaRequestData d) {
         return jdbc.queryForObject("""
                 INSERT INTO tarifas (tipo_vehiculo, precio_por_minuto,
