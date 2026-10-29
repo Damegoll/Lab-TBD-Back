@@ -28,9 +28,9 @@ public class AuditoriaRepository {
     public List<AuditoriaEstadoVehiculo> findByVehiculoId(long vehiculoId) {
         return jdbc.query("""
                 SELECT a.id, a.vehiculo_id, a.estado_anterior, a.estado_nuevo,
-                       u.username AS operador, a.fecha, a.motivo
+                       COALESCE(u.username, 'SISTEMA') AS operador, a.fecha, a.motivo
                 FROM auditoria_estado_vehiculo a
-                JOIN usuarios u ON u.id = a.operador_id
+                LEFT JOIN usuarios u ON u.id = a.operador_id
                 WHERE a.vehiculo_id = ?
                 ORDER BY a.fecha DESC
                 """, mapper, vehiculoId);

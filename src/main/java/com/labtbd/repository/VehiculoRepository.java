@@ -52,8 +52,14 @@ public class VehiculoRepository {
 
     public int changeState(long id, EstadoVehiculo estado,
                            String operador, String motivo) {
+        Long operadorId = jdbc.queryForObject(
+                "SELECT id FROM usuarios WHERE username = ? AND activo = TRUE",
+                Long.class, operador);
+        if (operadorId == null) {
+            throw new IllegalStateException("El operador autenticado no existe o está inactivo");
+        }
         jdbc.queryForObject("SELECT set_config('app.operador', ?, true)",
-                String.class, operador);
+                String.class, operadorId.toString());
         jdbc.queryForObject("SELECT set_config('app.motivo', ?, true)",
                 String.class, motivo);
         return jdbc.update("UPDATE vehiculos SET estado = ? WHERE id = ?",
