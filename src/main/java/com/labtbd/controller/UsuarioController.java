@@ -1,5 +1,6 @@
 package com.labtbd.controller;
 
+import com.labtbd.dto.ResumenMensualResponse;
 import com.labtbd.dto.UsuarioCreateRequest;
 import com.labtbd.dto.UsuarioResponse;
 import com.labtbd.dto.UsuarioUpdateRequest;
@@ -41,6 +42,18 @@ public class UsuarioController {
     @PreAuthorize("hasRole('ADMIN')")
     public UsuarioResponse findById(@PathVariable long id) {
         return UsuarioResponse.desde(service.findById(id));
+    }
+
+    @GetMapping("/{id}/resumen-mensual")
+    @PreAuthorize("hasRole('ADMIN')")
+    public List<ResumenMensualResponse> obtenerResumenMensual(@PathVariable long id) {
+        return service.obtenerResumenMensual(id);
+    }
+
+    @GetMapping("/me/resumen-mensual")
+    public List<ResumenMensualResponse> obtenerMiResumenMensual(Authentication authentication) {
+        long usuarioId = service.findByUsername(authentication.getName()).id();
+        return service.obtenerResumenMensual(usuarioId);
     }
 
     @PostMapping

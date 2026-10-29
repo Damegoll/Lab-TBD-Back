@@ -36,9 +36,9 @@ mvn spring-boot:run
 
 ## Estado del despliegue
 
-Compose es un despliegue local de desarrollo, no una configuración para nube/producción. No hay todavía pipeline CI/CD, TLS, proxy inverso ni infraestructura cloud.
+Compose es un despliegue local de desarrollo, no una configuración para nube/producción. No hay todavía pipeline CI/CD, TLS, proxy inverso ni infraestructura cloud. En cada `docker compose up`, el servicio `db-init` aplica idempotentemente el esquema y los triggers/procedimientos antes de iniciar la API.
 
-La aplicación inicializa `src/main/resources/SQLResources/schema.sql`. Ese esquema crea/migra la tabla `usuarios` y conserva `tareas` como ejemplo. Aunque ya existen capas Java para vehículos, tarifas, rebalanceos y auditoría, sus tablas, procedimientos y triggers de dominio aún deben incorporarse al esquema antes de que esos endpoints puedan operar contra una base nueva.
+El esquema reside en `src/main/resources/SQLResources/schema.sql`; los triggers y procedimientos en `src/main/resources/SQLResources/triggers_y_procedures.sql`. La inicialización crea las tablas de usuarios, billeteras, estaciones, vehículos, viajes, tarifas, traslados y auditoría, además de conservar `tareas` como ejemplo. En ejecuciones locales de Maven sin Compose, aplica ambos scripts con `psql` antes de probar los endpoints del dominio.
 
 ## Autenticación y permisos
 
@@ -97,6 +97,7 @@ Para probar otro secreto local, define `JWT_SECRET` en el entorno antes de levan
 | `GET`, `POST`, `DELETE` | `/api/v1/tarifas...` | `OPERADOR` o `ADMIN` |
 | `GET`, `POST` | `/api/v1/ordenes-traslado...` | `OPERADOR` o `ADMIN` |
 | `GET` | `/api/v1/vehiculos/{id}/auditoria` | `OPERADOR` o `ADMIN` |
+| `GET` | `/api/v1/estaciones/disponibles` | Usuario autenticado |
+| `GET` | `/api/v1/usuarios/me/resumen-mensual` | Usuario autenticado; propio resumen |
+| `GET` | `/api/v1/usuarios/{id}/resumen-mensual` | `ADMIN` |
 | `GET` | `/actuator/health` | Público |
-
-Las rutas de vehículos, tarifas, órdenes y auditoría tienen controladores, pero requieren completar el esquema SQL del dominio antes de usarse en una instalación nueva.

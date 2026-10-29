@@ -18,12 +18,27 @@ services:
       timeout: 5s
       retries: 10
 
+  db-init:
+    image: postgres:17
+    depends_on:
+      postgres:
+        condition: service_healthy
+    environment:
+      PGPASSWORD: labtbd
+    volumes:
+      - ./src/main/resources/SQLResources/schema.sql:/sql/schema.sql:ro
+      - ./src/main/resources/SQLResources/triggers_y_procedures.sql:/sql/triggers_y_procedures.sql:ro
+    entrypoint:
+      - sh
+      - -c
+      - psql -v ON_ERROR_STOP=1 -h postgres -U labtbd -d lab_tbd -f /sql/schema.sql -f /sql/triggers_y_procedures.sql
+
   api:
     build: .
     container_name: lab-tbd-api
     depends_on:
-      postgres:
-        condition: service_healthy
+      db-init:
+        condition: service_completed_successfully
     environment:
       DB_URL: jdbc:postgresql://postgres:5432/lab_tbd
       DB_USER: labtbd
