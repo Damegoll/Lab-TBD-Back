@@ -5,5 +5,6 @@ import java.math.BigDecimal;
 public record Billetera(
     long id,
     long usuarioId,
-    BigDecimal saldo
+    BigDecimal saldo,
+    boolean activa
 ) {}

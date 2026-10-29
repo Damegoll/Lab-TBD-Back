@@ -10,10 +10,11 @@ SELECT
 FROM (
     SELECT estacion_origen_id AS estacion_id, iniciado_en AS fecha, 1 AS iniciado, 0 AS finalizado
     FROM viajes
+    WHERE cancelado = FALSE
     UNION ALL
     SELECT estacion_destino_id AS estacion_id, finalizado_en AS fecha, 0 AS iniciado, 1 AS finalizado
     FROM viajes
-    WHERE finalizado_en IS NOT NULL
+    WHERE finalizado_en IS NOT NULL AND cancelado = FALSE
 ) eventos
 JOIN estaciones e ON e.id = eventos.estacion_id
 GROUP BY e.id, e.nombre, EXTRACT(HOUR FROM eventos.fecha);
@@ -36,6 +37,108 @@ CREATE TRIGGER trg_crear_billetera_usuario
     FOR EACH ROW
     EXECUTE FUNCTION fn_crear_billetera_usuario();
 
+CREATE OR REPLACE FUNCTION fn_validar_configuracion_estacion()
+RETURNS TRIGGER AS $$
+DECLARE
+    v_vehiculos INT;
+BEGIN
+    IF NEW.capacidad < 1
+       OR NEW.objetivo_bicicletas < 0
+       OR NEW.objetivo_scooters < 0
+       OR NEW.objetivo_bicicletas + NEW.objetivo_scooters > NEW.capacidad THEN
+        RAISE EXCEPTION 'Capacidad y objetivos de estación inválidos';
+    END IF;
+
+    SELECT COUNT(*) INTO v_vehiculos
+    FROM vehiculos
+    WHERE estacion_id = NEW.id;
+    IF v_vehiculos > NEW.capacidad THEN
+        RAISE EXCEPTION 'La capacidad no puede ser menor al inventario actual';
+    END IF;
+    RETURN NEW;
+END;
+$$ LANGUAGE plpgsql;
+
+DROP TRIGGER IF EXISTS trg_validar_configuracion_estacion ON estaciones;
+CREATE TRIGGER trg_validar_configuracion_estacion
+    BEFORE INSERT OR UPDATE OF capacidad, objetivo_bicicletas, objetivo_scooters ON estaciones
+    FOR EACH ROW
+    EXECUTE FUNCTION fn_validar_configuracion_estacion();
+
+CREATE OR REPLACE FUNCTION fn_validar_estacion_vehiculo()
+RETURNS TRIGGER AS $$
+DECLARE
+    v_capacidad INT;
+    v_actuales INT;
+BEGIN
+    IF TG_OP = 'UPDATE' THEN
+        PERFORM id
+        FROM estaciones
+        WHERE id IN (OLD.estacion_id, NEW.estacion_id)
+        ORDER BY id
+        FOR UPDATE;
+    ELSIF NEW.estacion_id IS NOT NULL THEN
+        PERFORM id
+        FROM estaciones
+        WHERE id = NEW.estacion_id
+        FOR UPDATE;
+    END IF;
+
+    IF NEW.estacion_id IS NULL THEN
+        RETURN NEW;
+    END IF;
+
+    SELECT capacidad INTO v_capacidad
+    FROM estaciones
+    WHERE id = NEW.estacion_id AND activa = TRUE;
+    IF NOT FOUND THEN
+        RAISE EXCEPTION 'La estación no existe o está inactiva';
+    END IF;
+
+    IF TG_OP = 'INSERT' THEN
+        SELECT COUNT(*) INTO v_actuales
+        FROM vehiculos
+        WHERE estacion_id = NEW.estacion_id;
+    ELSE
+        SELECT COUNT(*) INTO v_actuales
+        FROM vehiculos
+        WHERE estacion_id = NEW.estacion_id AND id <> NEW.id;
+    END IF;
+    IF v_actuales >= v_capacidad THEN
+        RAISE EXCEPTION 'La estación alcanzó su capacidad máxima';
+    END IF;
+    RETURN NEW;
+END;
+$$ LANGUAGE plpgsql;
+
+DROP TRIGGER IF EXISTS trg_validar_estacion_vehiculo ON vehiculos;
+CREATE TRIGGER trg_validar_estacion_vehiculo
+    BEFORE INSERT OR UPDATE OF estacion_id ON vehiculos
+    FOR EACH ROW
+    EXECUTE FUNCTION fn_validar_estacion_vehiculo();
+
+CREATE OR REPLACE FUNCTION fn_prevenir_cambio_vehiculo_en_viaje()
+RETURNS TRIGGER AS $$
+BEGIN
+    IF (NEW.estado IS DISTINCT FROM OLD.estado
+            OR NEW.bateria IS DISTINCT FROM OLD.bateria
+            OR NEW.codigo IS DISTINCT FROM OLD.codigo)
+       AND EXISTS (
+           SELECT 1 FROM viajes
+           WHERE vehiculo_id = OLD.id AND finalizado_en IS NULL
+       ) THEN
+        RAISE EXCEPTION 'No se puede modificar un vehículo con un viaje activo';
+    END IF;
+    RETURN NEW;
+END;
+$$ LANGUAGE plpgsql;
+
+DROP TRIGGER IF EXISTS trg_prevenir_cambio_vehiculo_en_viaje ON vehiculos;
+CREATE TRIGGER trg_prevenir_cambio_vehiculo_en_viaje
+    BEFORE UPDATE OF estado, bateria, codigo ON vehiculos
+    FOR EACH ROW
+    EXECUTE FUNCTION fn_prevenir_cambio_vehiculo_en_viaje();
+
 CREATE OR REPLACE FUNCTION fn_validar_inicio_viaje()
 RETURNS TRIGGER AS $$
 DECLARE
@@ -43,6 +146,8 @@ DECLARE
     v_bateria INT;
     v_estado VARCHAR(50);
     v_estacion_id BIGINT;
+    v_tarifa_id BIGINT;
+    v_precio NUMERIC(10, 2);
 BEGIN
     SELECT saldo
     INTO v_saldo
@@ -55,6 +160,12 @@ BEGIN
     END IF;
     IF v_saldo < 0 THEN
         RAISE EXCEPTION 'No se puede iniciar el viaje: el saldo es negativo';
+    END IF;
+    IF NOT EXISTS (
+        SELECT 1 FROM billeteras
+        WHERE usuario_id = NEW.usuario_id AND activa = TRUE
+    ) THEN
+        RAISE EXCEPTION 'La billetera del usuario está inactiva';
     END IF;
     IF EXISTS (
         SELECT 1 FROM viajes
@@ -78,8 +189,26 @@ BEGIN
     IF v_estado <> 'DISPONIBLE' OR v_estacion_id IS NULL THEN
         RAISE EXCEPTION 'El vehículo no está disponible en una estación';
     END IF;
+    IF NOT EXISTS (SELECT 1 FROM estaciones WHERE id = v_estacion_id AND activa = TRUE) THEN
+        RAISE EXCEPTION 'La estación de origen está inactiva';
+    END IF;
+
+    SELECT id, precio_por_minuto
+    INTO v_tarifa_id, v_precio
+    FROM tarifas
+    WHERE tipo_vehiculo = (SELECT tipo FROM vehiculos WHERE id = NEW.vehiculo_id)
+      AND activa = TRUE
+      AND vigente_desde <= NOW()
+      AND (vigente_hasta IS NULL OR vigente_hasta > NOW())
+    ORDER BY vigente_desde DESC
+    LIMIT 1;
+    IF NOT FOUND THEN
+        RAISE EXCEPTION 'No existe una tarifa vigente para el vehículo';
+    END IF;
 
     NEW.estacion_origen_id := v_estacion_id;
+    NEW.tarifa_id := v_tarifa_id;
+    NEW.precio_por_minuto_aplicado := v_precio;
     UPDATE vehiculos SET estado = 'EN_USO', estacion_id = NULL WHERE id = NEW.vehiculo_id;
     RETURN NEW;
 END;
@@ -158,15 +287,10 @@ BEGIN
     END IF;
 
     v_minutos := GREATEST(CEIL(EXTRACT(EPOCH FROM (NOW() - v_iniciado_en)) / 60.0), 1);
-    SELECT precio_por_minuto
+    SELECT precio_por_minuto_aplicado
     INTO v_precio_minuto
-    FROM tarifas
-    WHERE tipo_vehiculo = v_tipo_vehiculo
-      AND activa = TRUE
-      AND vigente_desde <= NOW()
-      AND (vigente_hasta IS NULL OR vigente_hasta > NOW())
-    ORDER BY vigente_desde DESC
-    LIMIT 1;
+    FROM viajes
+    WHERE id = p_viaje_id;
 
     IF NOT FOUND THEN
         RAISE EXCEPTION 'No existe una tarifa vigente para el tipo %', v_tipo_vehiculo;
@@ -184,6 +308,12 @@ BEGIN
     END IF;
 
     UPDATE billeteras SET saldo = saldo - v_costo_total WHERE usuario_id = v_usuario_id;
+    INSERT INTO movimientos_billetera
+        (billetera_id, operador_id, tipo, monto, motivo)
+    SELECT id, NULL, 'CARGO_VIAJE', -v_costo_total,
+           'Cobro automático del viaje ' || p_viaje_id
+    FROM billeteras
+    WHERE usuario_id = v_usuario_id;
     UPDATE viajes
     SET finalizado_en = NOW(),
         estacion_destino_id = p_estacion_destino_id,
@@ -191,6 +321,37 @@ BEGIN
     WHERE id = p_viaje_id;
     UPDATE vehiculos
     SET estacion_id = p_estacion_destino_id, estado = 'DISPONIBLE'
+    WHERE id = v_vehiculo_id;
+END;
+$$;
+
+CREATE OR REPLACE PROCEDURE cancelar_viaje(
+    p_viaje_id BIGINT,
+    p_usuario_id BIGINT
+)
+LANGUAGE plpgsql
+AS $$
+DECLARE
+    v_vehiculo_id BIGINT;
+    v_estacion_origen_id BIGINT;
+BEGIN
+    SELECT vehiculo_id, estacion_origen_id
+    INTO v_vehiculo_id, v_estacion_origen_id
+    FROM viajes
+    WHERE id = p_viaje_id
+      AND usuario_id = p_usuario_id
+      AND finalizado_en IS NULL
+    FOR UPDATE;
+
+    IF NOT FOUND THEN
+        RAISE EXCEPTION 'El viaje no existe, no pertenece al usuario o ya finalizó';
+    END IF;
+
+    UPDATE viajes
+    SET finalizado_en = NOW(), costo = 0, cancelado = TRUE
+    WHERE id = p_viaje_id;
+    UPDATE vehiculos
+    SET estacion_id = v_estacion_origen_id, estado = 'DISPONIBLE'
     WHERE id = v_vehiculo_id;
 END;
 $$;
@@ -206,7 +367,12 @@ CREATE OR REPLACE PROCEDURE ejecutar_rebalanceo(
 LANGUAGE plpgsql
 AS $$
 DECLARE
-    v_disponibles INT;
+    v_disponibles_origen INT;
+    v_disponibles_destino INT;
+    v_vehiculos_destino INT;
+    v_objetivo_origen INT;
+    v_objetivo_destino INT;
+    v_capacidad_destino INT;
     v_actualizados INT;
 BEGIN
     IF p_solicitud_id IS NULL OR p_cantidad < 1 THEN
@@ -229,6 +395,45 @@ BEGIN
     ORDER BY id
     FOR UPDATE;
 
+    SELECT capacidad,
+           CASE p_tipo_vehiculo
+               WHEN 'BICICLETA' THEN objetivo_bicicletas
+               WHEN 'SCOOTER' THEN objetivo_scooters
+           END
+    INTO v_capacidad_destino, v_objetivo_destino
+    FROM estaciones
+    WHERE id = p_estacion_destino_id;
+
+    SELECT CASE p_tipo_vehiculo
+               WHEN 'BICICLETA' THEN objetivo_bicicletas
+               WHEN 'SCOOTER' THEN objetivo_scooters
+           END
+    INTO v_objetivo_origen
+    FROM estaciones
+    WHERE id = p_estacion_origen_id;
+
+    SELECT COUNT(*) INTO v_disponibles_origen
+    FROM vehiculos
+    WHERE estacion_id = p_estacion_origen_id
+      AND tipo = p_tipo_vehiculo AND estado = 'DISPONIBLE';
+    SELECT COUNT(*) INTO v_disponibles_destino
+    FROM vehiculos
+    WHERE estacion_id = p_estacion_destino_id
+      AND tipo = p_tipo_vehiculo AND estado = 'DISPONIBLE';
+    SELECT COUNT(*) INTO v_vehiculos_destino
+    FROM vehiculos
+    WHERE estacion_id = p_estacion_destino_id;
+
+    IF v_disponibles_origen - v_objetivo_origen < p_cantidad THEN
+        RAISE EXCEPTION 'La estación de origen no tiene el exceso solicitado';
+    END IF;
+    IF v_objetivo_destino - v_disponibles_destino < p_cantidad THEN
+        RAISE EXCEPTION 'La estación de destino no tiene un déficit suficiente';
+    END IF;
+    IF v_capacidad_destino - v_vehiculos_destino < p_cantidad THEN
+        RAISE EXCEPTION 'La estación de destino no tiene capacidad física suficiente';
+    END IF;
+
     WITH seleccion AS (
         SELECT id
         FROM vehiculos
@@ -245,7 +450,7 @@ BEGIN
 
     GET DIAGNOSTICS v_actualizados = ROW_COUNT;
     IF v_actualizados <> p_cantidad THEN
-        RAISE EXCEPTION 'No hay suficientes vehículos disponibles en la estación de origen';
+        RAISE EXCEPTION 'No fue posible reservar todos los vehículos solicitados';
     END IF;
 
     INSERT INTO ordenes_traslado (

@@ -9,5 +9,10 @@ public record Viaje(
         long vehiculoId,
         OffsetDateTime iniciadoEn,
         OffsetDateTime finalizadoEn,
-        BigDecimal costo
+        BigDecimal costo,
+        Long estacionOrigenId,
+        Long estacionDestinoId,
+        Long tarifaId,
+        BigDecimal precioPorMinutoAplicado,
+        boolean cancelado
 ) {}

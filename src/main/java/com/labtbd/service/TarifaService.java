@@ -24,13 +24,29 @@ public class TarifaService {
     }
     
     public Tarifa create(TarifaRequest r){
-        if (r.vigenteHasta() != null && !r.vigenteHasta().isAfter(r.vigenteDesde())){
-            throw new ResponseStatusException(HttpStatus.BAD_REQUEST,
-                "vigenteHasta debe ser posterior a vigenteDesde");
-        }
+        validarVigencia(r);
         return repo.create(new TarifaRepository.TarifaRequestData(
             r.tipoVehiculo(), r.precioPorMinuto(), r.vigenteDesde(), r.vigenteHasta()
         ));
+    }
+
+    public Tarifa update(long id, TarifaRequest r) {
+        validarVigencia(r);
+        TarifaRepository.TarifaRequestData data = new TarifaRepository.TarifaRequestData(
+                r.tipoVehiculo(), r.precioPorMinuto(), r.vigenteDesde(), r.vigenteHasta());
+        if (repo.update(id, data) == 0) {
+            throw new ResponseStatusException(HttpStatus.NOT_FOUND,
+                    "No se encuentra una tarifa activa con ese ID");
+        }
+        return findById(id);
+    }
+
+    private void validarVigencia(TarifaRequest request) {
+        if (request.vigenteHasta() != null
+                && !request.vigenteHasta().isAfter(request.vigenteDesde())) {
+            throw new ResponseStatusException(HttpStatus.BAD_REQUEST,
+                    "vigenteHasta debe ser posterior a vigenteDesde");
+        }
     }
 
     public void deactivate(long id){

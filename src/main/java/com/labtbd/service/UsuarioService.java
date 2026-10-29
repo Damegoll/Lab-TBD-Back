@@ -94,7 +94,7 @@ public class UsuarioService {
                         ::double precision AS minutos_totales,
                     COALESCE(SUM(costo), 0)::double precision AS gasto_total
                 FROM viajes
-                WHERE usuario_id = ? AND finalizado_en IS NOT NULL
+                WHERE usuario_id = ? AND finalizado_en IS NOT NULL AND cancelado = FALSE
                 GROUP BY EXTRACT(YEAR FROM iniciado_en), EXTRACT(MONTH FROM iniciado_en)
                 ORDER BY anio DESC, mes DESC
                 """,

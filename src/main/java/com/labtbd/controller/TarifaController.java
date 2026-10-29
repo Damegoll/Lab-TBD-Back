@@ -7,6 +7,7 @@ import org.springframework.http.HttpStatus;
 import org.springframework.security.access.prepost.PreAuthorize;
 import org.springframework.web.bind.annotation.DeleteMapping;
 import org.springframework.web.bind.annotation.GetMapping;
+import org.springframework.web.bind.annotation.PutMapping;
 import org.springframework.web.bind.annotation.PathVariable;
 import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.RequestBody;
@@ -32,10 +33,22 @@ public class TarifaController {
         return service.findAll().stream().map(TarifaResponse::desde).toList();
     }
 
+    @GetMapping("/{id}")
+    @PreAuthorize("hasAnyRole('OPERADOR', 'ADMIN')")
+    public TarifaResponse findById(@PathVariable long id) {
+        return TarifaResponse.desde(service.findById(id));
+    }
+
     @PostMapping
     @PreAuthorize("hasAnyRole('OPERADOR', 'ADMIN')")
     public TarifaResponse create(@Valid @RequestBody TarifaRequest r){
         return TarifaResponse.desde(service.create(r));
+    }
+
+    @PutMapping("/{id}")
+    @PreAuthorize("hasAnyRole('OPERADOR', 'ADMIN')")
+    public TarifaResponse update(@PathVariable long id, @Valid @RequestBody TarifaRequest r) {
+        return TarifaResponse.desde(service.update(id, r));
     }
 
     @DeleteMapping("/{id}")

@@ -4,7 +4,9 @@ import com.labtbd.dto.VehiculoResponse;
 import com.labtbd.dto.VehiculoCreateRequest;
 import com.labtbd.dto.VehiculoUpdateRequest;
 import com.labtbd.dto.CambiarEstadoRequest;
+import com.labtbd.dto.VehiculoRetirarRequest;
 import com.labtbd.service.VehiculoService;
+import com.labtbd.entity.EstadoVehiculo;
 import jakarta.validation.Valid;
 import org.springframework.http.HttpStatus;
 import org.springframework.security.access.prepost.PreAuthorize;
@@ -52,5 +54,16 @@ public class VehiculoController {
                             @Valid @RequestBody CambiarEstadoRequest r,
                             Authentication auth) {
         service.changeState(id, r, auth.getName());
+    }
+
+    @DeleteMapping("/{id}")
+    @PreAuthorize("hasAnyRole('OPERADOR','ADMIN')")
+    @ResponseStatus(HttpStatus.NO_CONTENT)
+    public void retire(@PathVariable long id,
+                       @Valid @RequestBody VehiculoRetirarRequest request,
+                       Authentication auth) {
+        service.changeState(id,
+                new CambiarEstadoRequest(EstadoVehiculo.DADO_DE_BAJA, request.motivo()),
+                auth.getName());
     }
 }
